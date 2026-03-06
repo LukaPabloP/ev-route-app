@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EV Route Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">⚡</div>
+    <div class="header-text">
+      <h1>EV Route Agent</h1>
+      <p></p>
+    </div>
+    <div class="header-badges">
+      <span class="badge badge-claude">Claude</span>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <div class="main-grid">
+
+    <!-- LEFT: Form -->
+    <div class="card">
+      <div class="card-title">Route konfigurieren</div>
+
+      <div class="form-group">
+        <label>Startort</label>
+        <input type="text" id="origin" placeholder="z.B. Berlin Hauptbahnhof">
+      </div>
+
+      <div class="form-group">
+        <label>Zielort</label>
+        <input type="text" id="destination" placeholder="z.B. Wien Westbahnhof">
+      </div>
+
+      <div class="form-group">
+        <label>Zwischenstopps (optional)</label>
+        <input type="text" id="waypoints" placeholder="z.B. Prag Innenstadt, Brno">
+        <div class="input-hint">Kommasepariert</div>
+      </div>
+
+      <div class="form-divider"></div>
+
+      <div class="form-group">
+        <label>EV Reichweite</label>
+        <div class="range-wrap">
+          <input type="range" id="range_km" min="50" max="800" value="300"
+                 oninput="document.getElementById('range_val').textContent = this.value + ' km'">
+          <span class="range-value" id="range_val">300 km</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Mindest-Ladeleistung</label>
+        <div class="range-wrap">
+          <input type="range" id="min_power" min="22" max="350" step="22" value="50"
+                 oninput="document.getElementById('power_val').textContent = this.value + ' kW'">
+          <span class="range-value" id="power_val">50 kW</span>
+        </div>
+      </div>
+
+      <div class="form-divider"></div>
+
+      <div class="form-group">
+        <label>Ladeanbieter</label>
+        <div class="provider-controls">
+          <input type="text" id="provider-search" placeholder="Anbieter suchen..." oninput="filterProviders(this.value)">
+          <button class="select-all-btn" onclick="toggleAll()">Alle / keine</button>
+        </div>
+        <div class="providers-grid" id="providers-grid"></div>
+      </div>
+
+      <div id="provider-hint" style="color: var(--danger); font-size: 12px; font-family: 'Space Mono', monospace; margin-top: 8px; display: none;">
+        Bitte mindestens einen Ladeanbieter auswaehlen.
+      </div>
+
+      <button class="btn-plan" id="btn-plan" onclick="startPlanning()">
+        <span>⚡</span> Route planen
+      </button>
+    </div>
+
+    <!-- RIGHT: Progress + Results -->
+    <div class="right-panel">
+
+      <!-- Agents -->
+      <div class="card">
+        <div class="card-title">Agent Pipeline</div>
+        <div class="agents-track">
+
+          <div class="agent-step" id="agent-1">
+            <div class="agent-icon">🗺️</div>
+            <div class="agent-info">
+              <div class="agent-name">
+                Route Planner
+                <span class="agent-model">Claude</span>
+              </div>
+              <div class="agent-desc">Geocodiert Adressen · Berechnet Ladestopp-Positionen</div>
+              <div class="agent-status" id="status-1"></div>
+            </div>
+          </div>
+
+          <div class="agent-connector"></div>
+
+          <div class="agent-step" id="agent-2">
+            <div class="agent-icon">🔋</div>
+            <div class="agent-info">
+              <div class="agent-name">
+                Charging Specialist
+                <span class="agent-model">Claude</span>
+              </div>
+              <div class="agent-desc">Findet Ladestationen via IONITY · Tesla · GoingElectric</div>
+              <div class="agent-status" id="status-2"></div>
+            </div>
+          </div>
+
+          <div class="agent-connector"></div>
+
+          <div class="agent-step" id="agent-3">
+            <div class="agent-icon">✅</div>
+            <div class="agent-info">
+              <div class="agent-name">
+                Provider QA
+                <span class="agent-model">Claude</span>
+              </div>
+              <div class="agent-desc">Validiert Anbieter-Filter · Ersetzt falsche Stationen</div>
+              <div class="agent-status" id="status-3"></div>
+            </div>
+          </div>
+
+          <div class="agent-connector"></div>
+
+          <div class="agent-step" id="agent-4">
+            <div class="agent-icon">🔗</div>
+            <div class="agent-info">
+              <div class="agent-name">
+                Route Builder
+                <span class="agent-model">Claude</span>
+              </div>
+              <div class="agent-desc">Erstellt den finalen Google Maps Link</div>
+              <div class="agent-status" id="status-4"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Terminal log -->
+      <div class="terminal">
+        <div class="terminal-header">
+          <div class="terminal-dot td-red"></div>
+          <div class="terminal-dot td-yellow"></div>
+          <div class="terminal-dot td-green"></div>
+          <span class="terminal-title">agent.log</span>
+        </div>
+        <div class="terminal-body" id="terminal">
+          <div class="log-line">EV Route Agent v1.0 bereit.</div>
+          <div class="log-line">Route konfigurieren und starten...</div>
+          <span class="cursor"></span>
+        </div>
+      </div>
+
+      <!-- Idle state -->
+      <div class="idle-state" id="idle-state">
+        <div class="idle-icon">🛣️</div>
+        <div class="idle-text">Konfiguriere deine Route links und starte die Agent-Pipeline.</div>
+      </div>
+
+      <!-- Result -->
+      <div class="result-card" id="result-card">
+        <div class="result-title">Deine EV Route</div>
+
+        <div class="route-summary" id="route-summary"></div>
+
+        <div class="route-endpoints" id="route-endpoints"></div>
+
+        <div id="stations-section" style="display:none">
+          <div class="result-section-label">Ladestopps entlang der Route</div>
+          <div class="stations-list" id="stations-list"></div>
+        </div>
+
+        <a class="maps-btn" id="maps-link" href="#" target="_blank">
+          In Google Maps oeffnen
+        </a>
+
+        <details class="raw-details">
+          <summary class="raw-summary">Agent-Rohdaten anzeigen</summary>
+          <div class="result-text" id="result-text"></div>
+        </details>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
