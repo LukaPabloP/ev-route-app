@@ -47,6 +47,26 @@ GE_NETWORK_NAMES: dict[str, list[str]] = {
 # Backward-compatible alias
 CHARGING_PROVIDERS = OCM_OPERATOR_IDS
 
+# Bundesnetzagentur operator name patterns (for SQL LIKE queries)
+BNA_OPERATOR_PATTERNS: dict[str, list[str]] = {
+    "IONITY":              ["IONITY"],
+    "Tesla Supercharger":  ["Tesla"],
+    "EnBW mobility+":      ["EnBW"],
+    "Allego":              ["Allego"],
+    "Fastned":             ["Fastned"],
+    "Maingau Energie":     ["Maingau"],
+    "Lidl":                ["Lidl"],
+    "ARAL Pulse":          ["Aral"],
+    "Shell Recharge":      ["Shell"],
+    "Aldi Sued":           ["ALDI"],
+    "E.ON Drive":          ["E.ON"],
+    "EWE Go":              ["EWE"],
+    "Recharge (Vattenfall)": ["Vattenfall", "Recharge"],
+    "Total Energies":      ["Total"],
+    "Smatrics":            ["SMATRICS"],
+    "Wien Energie":        ["Wien Energie"],
+}
+
 # Providers that support HPC (High Power Charging, >= 150 kW)
 HPC_PROVIDERS = {"IONITY", "Tesla Supercharger", "Fastned", "ARAL Pulse", "Allego"}
 
@@ -77,6 +97,20 @@ def get_ge_networks(provider_names: list[str]) -> list[str]:
                 networks.extend(val)
                 break
     return networks
+
+
+def get_bna_patterns(provider_names: list[str]) -> list[str]:
+    """Returns BNA operator LIKE patterns for a list of provider names."""
+    patterns = []
+    for name in provider_names:
+        if name in BNA_OPERATOR_PATTERNS:
+            patterns.extend(BNA_OPERATOR_PATTERNS[name])
+            continue
+        for key, val in BNA_OPERATOR_PATTERNS.items():
+            if name.lower() in key.lower():
+                patterns.extend(val)
+                break
+    return patterns
 
 
 def list_all_providers() -> str:

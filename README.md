@@ -12,16 +12,18 @@ Browser (HTML/CSS/JS)
 FastAPI Server (server.py)
   │
   ├── Agent 1: Route Planner         [Claude]  → Geocodierung + Ladestopp-Berechnung
-  ├── Agent 2: Charging Specialist    [Claude]  → IONITY/Tesla direkt + GoingElectric/OCM
+  ├── Agent 2: Charging Specialist    [Claude]  → IONITY/Tesla/BNA direkt + GE/OCM Fallback
   ├── Agent 3: Provider QA            [Claude]  → Validiert Anbieter-Filter
   └── Agent 4: Route Builder          [Claude]  → Google Maps Link mit allen Waypoints
 ```
 
-### Direkte Datenquellen
+### Datenquellen
 
-- **IONITY** – Offizielle Stationsdaten (kein API Key noetig)
-- **Tesla Supercharger** – Via supercharge.info (kein API Key noetig)
-- **Andere Anbieter** – GoingElectric API + OpenChargeMap als Fallback
+- **IONITY** – Offizielle Stationsdaten via wf-assets.com (kein API Key)
+- **Tesla Supercharger** – Via supercharge.info (kein API Key)
+- **Bundesnetzagentur** – Alle ~195.000 Ladepunkte in DE via Open Data ArcGIS (kein API Key)
+- **GoingElectric** – Europaweite Stationsdaten (API Key)
+- **OpenChargeMap** – Globaler Fallback (API Key)
 
 ## Setup
 
@@ -65,11 +67,11 @@ ev_route_webapp/
     ├── crew.py              ← CrewAI Crew (4 Agents, sequential)
     ├── agents.py            ← Agent-Definitionen
     ├── tasks.py             ← Task-Definitionen mit Waypoint-Support
-    ├── config/providers.py  ← Ladeanbieter + OCM/GE Mappings
+    ├── config/providers.py  ← Ladeanbieter + OCM/GE/BNA Mappings
     └── tools/
         ├── geocode_tool.py           ← Google Maps Geocoding
         ├── route_analysis_tool.py    ← Routenberechnung + Ladestopp-Positionen
-        ├── charging_station_tool.py  ← IONITY/Tesla direkt + API-Fallback
+        ├── charging_station_tool.py  ← IONITY/Tesla/BNA direkt + API-Fallback
         └── maps_link_builder.py      ← Google Maps URL Builder
 ```
 

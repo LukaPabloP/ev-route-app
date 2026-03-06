@@ -4,7 +4,7 @@ import requests
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from ev_route_agent.config.providers import get_operator_ids, get_ge_networks
+from ev_route_agent.config.providers import get_operator_ids, get_ge_networks, get_bna_patterns
 
 # ── IONITY direct data (cached) ────────────────────────────────────────────
 IONITY_DATA_URL = "https://wf-assets.com/ionity/mapdata.json"
@@ -127,14 +127,23 @@ class ChargingStationTool(BaseTool):
                 f"in {radius_km} km Umkreis von {latitude:.4f},{longitude:.4f} gefunden."
             )
 
-        # Remaining providers need GoingElectric/OCM
+        # Remaining providers: try BNA first (no API key needed), then GE/OCM
         if remaining_providers:
-            api_result = self._search_other_providers(
+            # BNA: covers all German stations
+            bna_result = self._search_bna(
                 latitude, longitude, radius_km,
                 remaining_providers, min_power_kw, max_results,
             )
-            if api_result:
-                direct_results.append(api_result)
+            if bna_result:
+                direct_results.append(bna_result)
+            else:
+                # Fallback to GoingElectric/OCM
+                api_result = self._search_other_providers(
+                    latitude, longitude, radius_km,
+                    remaining_providers, min_power_kw, max_results,
+                )
+                if api_result:
+                    direct_results.append(api_result)
 
         # Return combined results from all sources
         if direct_results:
@@ -148,7 +157,14 @@ class ChargingStationTool(BaseTool):
                 f"Diese Anbieter haben moeglicherweise keine Abdeckung in dieser Region."
             )
 
-        # No provider filter — search all
+        # No provider filter — search all via BNA first, then GE/OCM
+        result = self._search_bna(
+            latitude, longitude, radius_km,
+            [], min_power_kw, max_results,
+        )
+        if result:
+            return result
+
         result = self._search_other_providers(
             latitude, longitude, radius_km,
             [], min_power_kw, max_results,
@@ -286,6 +302,113 @@ class ChargingStationTool(BaseTool):
             ]
 
         return "\n".join(lines)
+
+    # ── Bundesnetzagentur (all German stations, no API key) ─────────────
+
+    def _search_bna(
+        self, latitude: float, longitude: float,
+        radius_km: float, provider_list: list[str],
+        min_power_kw: float, max_results: int,
+    ) -> str | None:
+        # Build bounding box from radius
+        dlat = radius_km / 111.0
+        dlng = radius_km / (111.0 * math.cos(math.radians(latitude)))
+        bbox = f"{longitude - dlng},{latitude - dlat},{longitude + dlng},{latitude + dlat}"
+
+        # Build WHERE clause
+        where_parts = [f"Nennleistung_Ladeeinrichtung__k >= {int(min_power_kw)}"]
+        if provider_list:
+            patterns = get_bna_patterns(provider_list)
+            if patterns:
+                like_clauses = [f"Betreiber LIKE '%{p}%'" for p in patterns]
+                where_parts.append(f"({' OR '.join(like_clauses)})")
+
+        params = {
+            "where": " AND ".join(where_parts),
+            "outFields": "Betreiber,Anzeigename__Karte_,Ort,Straße,Hausnummer,Breitengrad,Längengrad,"
+                         "Nennleistung_Ladeeinrichtung__k,Anzahl_Ladepunkte,Steckertypen1,"
+                         "Nennleistung_Stecker1,Steckertypen2,Nennleistung_Stecker2",
+            "geometry": bbox,
+            "geometryType": "esriGeometryEnvelope",
+            "inSR": "4326",
+            "outSR": "4326",
+            "spatialRel": "esriSpatialRelIntersects",
+            "orderByFields": "Nennleistung_Ladeeinrichtung__k DESC",
+            "resultRecordCount": max(max_results * 3, 15),
+            "f": "json",
+        }
+
+        try:
+            resp = requests.get(
+                "https://services2.arcgis.com/jUpNdisbWqRpMo35/arcgis/rest/services/"
+                "Ladesaeulen_in_Deutschland/FeatureServer/0/query",
+                params=params, timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except requests.RequestException:
+            return None
+
+        features = data.get("features", [])
+        if not features:
+            return None
+
+        lines = [
+            f"=== BUNDESNETZAGENTUR LADESTATIONEN (Radius ~{radius_km}km, min {min_power_kw}kW) ===",
+            f"Suche bei: {latitude:.5f},{longitude:.5f}",
+            f"Quelle: Bundesnetzagentur Ladesaeulenregister (Open Data)",
+            "",
+        ]
+
+        count = 0
+        for feat in features:
+            if count >= max_results:
+                break
+            a = feat.get("attributes", {})
+            s_lat = a.get("Breitengrad")
+            s_lng = a.get("Längengrad")
+            if not s_lat or not s_lng:
+                continue
+
+            dist = _haversine_km(latitude, longitude, s_lat, s_lng)
+            if dist > radius_km:
+                continue
+
+            operator = a.get("Betreiber") or "Unbekannt"
+            display_name = a.get("Anzeigename__Karte_") or operator
+            city = a.get("Ort", "")
+            street = a.get("Straße", "")
+            house_nr = a.get("Hausnummer", "")
+            power = a.get("Nennleistung_Ladeeinrichtung__k", 0)
+            num_points = a.get("Anzahl_Ladepunkte", 0)
+
+            connectors = []
+            for i in range(1, 3):
+                ct = a.get(f"Steckertypen{i}")
+                if ct:
+                    cp = a.get(f"Nennleistung_Stecker{i}", "")
+                    connectors.append(f"{ct} ({cp}kW)" if cp else ct)
+            connectors_str = ", ".join(connectors) if connectors else "unbekannt"
+
+            addr = f"{street} {house_nr}".strip()
+            if city:
+                addr = f"{addr}, {city}" if addr else city
+
+            lines += [
+                f"--- Station {count + 1} ---",
+                f"Name:        {display_name}",
+                f"Anbieter:    {operator}",
+                f"Adresse:     {addr}",
+                f"Koordinaten: {s_lat},{s_lng}",
+                f"Entfernung:  {dist:.1f} km",
+                f"Max. Leistung: {power} kW",
+                f"Ladepunkte:  {num_points}",
+                f"Stecker:     {connectors_str}",
+                "",
+            ]
+            count += 1
+
+        return "\n".join(lines) if count > 0 else None
 
     # ── Other providers (GoingElectric + OCM fallback) ──────────────────
 
