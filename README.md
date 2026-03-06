@@ -1,78 +1,95 @@
-# ⚡ EV Route Agent – WebApp
+# EV Route Agent
 
-Vollständige WebApp mit **FastAPI Backend** + **HTML/JS Frontend**.  
-Die 3 CrewAI-Agenten streamen ihren Fortschritt live ans Frontend via **Server-Sent Events (SSE)**.
+Multi-Agent Web App zur Planung von Elektrofahrzeug-Routen mit optimalen Ladestopps.
+Nutzt **CrewAI** mit 4 spezialisierten Agenten, die live ihren Fortschritt via **Server-Sent Events** ans Frontend streamen.
 
-## 🏗 Architektur
-
-Used Api´s
-Claude: https://platform.claude.com/claude-code
-
-Google Maps: https://console.cloud.google.com/google/maps-apis/home?project=project-d6df3b93-6216-4f42-b39&hl=en
-
-Opencharge: https://openchargemap.org/loginprovider/beginlogin
-
-GoinElectric: https://www.goingelectric.de/stromtankstellen/api/ucp/
-
-Deepseek: https://platform.deepseek.com/usage
+## Architektur
 
 ```
-Browser (index.html)
-  │  SSE Stream (live agent logs)
+Browser (HTML/CSS/JS)
+  │  SSE Stream (live Agent-Logs)
   ▼
 FastAPI Server (server.py)
   │
-  ├── Agent 1: Route Planner    [DeepSeek]  → Google Maps Directions API
-  ├── Agent 2: Charging Specialist [Claude] → OpenChargeMap API
-  └── Agent 3: Route Builder   [DeepSeek]  → Google Maps URL
+  ├── Agent 1: Route Planner         [Claude]  → Geocodierung + Ladestopp-Berechnung
+  ├── Agent 2: Charging Specialist    [Claude]  → IONITY/Tesla direkt + GoingElectric/OCM
+  ├── Agent 3: Provider QA            [Claude]  → Validiert Anbieter-Filter
+  └── Agent 4: Route Builder          [Claude]  → Google Maps Link mit allen Waypoints
 ```
 
-## 🛠 Setup
+### Direkte Datenquellen
 
-### 1. Abhängigkeiten
+- **IONITY** – Offizielle Stationsdaten (kein API Key noetig)
+- **Tesla Supercharger** – Via supercharge.info (kein API Key noetig)
+- **Andere Anbieter** – GoingElectric API + OpenChargeMap als Fallback
+
+## Setup
+
+### 1. Abhaengigkeiten
+
 ```bash
 cd ev_route_webapp
-uv sync
+pip install -e .
 ```
 
 ### 2. API Keys
-```bash
-cp .env.example .env
-# Fülle DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, GOOGLE_MAPS_API_KEY, OPENCHARGERMAP_API_KEY aus
+
+Erstelle eine `.env` Datei im Projektroot:
+
+```
+ANTHROPIC_API_KEY=sk-...
+GOOGLE_MAPS_API_KEY=...
+OPENCHARGERMAP_API_KEY=...
+GOINGELECTRIC_API_KEY=...
+DEEPSEEK_API_KEY=...
 ```
 
 ### 3. Server starten
+
 ```bash
-uv run ev-route-web
+python -m ev_route_agent.server
 # → http://localhost:8000
 ```
 
-## 📁 Struktur
+## Projektstruktur
 
 ```
 ev_route_webapp/
 ├── pyproject.toml
-├── .env.example
 ├── static/
-│   └── index.html              ← Frontend (dark electric UI)
+│   ├── index.html          ← Frontend HTML
+│   ├── style.css           ← Dark Electric UI
+│   └── app.js              ← Client-Logik + SSE Handling
 └── src/ev_route_agent/
-    ├── server.py               ← FastAPI + SSE Streaming
-    ├── crew.py                 ← CrewAI Crew
-    ├── agents.py               ← DeepSeek + Claude Agenten
-    ├── tasks.py                ← Task Definitionen
-    ├── config/providers.py     ← Ladeanbieter
+    ├── server.py            ← FastAPI + SSE Streaming
+    ├── crew.py              ← CrewAI Crew (4 Agents, sequential)
+    ├── agents.py            ← Agent-Definitionen
+    ├── tasks.py             ← Task-Definitionen mit Waypoint-Support
+    ├── config/providers.py  ← Ladeanbieter + OCM/GE Mappings
     └── tools/
-        ├── geocode_tool.py
-        ├── route_analysis_tool.py
-        ├── charging_station_tool.py
-        └── maps_link_builder.py
+        ├── geocode_tool.py           ← Google Maps Geocoding
+        ├── route_analysis_tool.py    ← Routenberechnung + Ladestopp-Positionen
+        ├── charging_station_tool.py  ← IONITY/Tesla direkt + API-Fallback
+        └── maps_link_builder.py      ← Google Maps URL Builder
 ```
 
-## 🌐 API Endpoints
+## API Endpoints
 
 | Endpoint | Methode | Beschreibung |
 |---|---|---|
-| `/` | GET | Frontend HTML |
-| `/health` | GET | API Key Status prüfen |
-| `/providers` | GET | Alle Ladeanbieter abrufen |
-| `/plan-route` | POST | Route planen (SSE Stream) |
+| `/` | GET | Frontend |
+| `/health` | GET | API Key Status |
+| `/providers` | GET | Alle Ladeanbieter |
+| `/plan-route` | POST | Route planen (startet Job) |
+| `/stream/{job_id}` | GET | SSE Stream fuer Job |
+
+## Features
+
+- Anbieter-Filter (IONITY, Tesla, EnBW, Allego, etc.)
+- Suchfunktion fuer Ladeanbieter
+- Zwischenstopps (werden geocodiert und in Google Maps Link eingebaut)
+- Einstellbare EV-Reichweite und Mindest-Ladeleistung
+- Live Agent-Pipeline mit Fortschrittsanzeige
+- Ergebnis mit Stationskarten, Anbieter, Leistung
+- Google Maps Link mit allen Ladestopps als Waypoints
+- Mobile Responsive
