@@ -193,6 +193,14 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(0,229,160,0.1);
 }
 input::placeholder { color: var(--text-dim); }
+input.input-error {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(255,75,75,0.15);
+}
+input.input-error:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(255,75,75,0.25);
+}
 
 /* Range slider */
 .range-wrap {
@@ -564,6 +572,22 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 /* Station cards */
+.range-warning {
+  background: rgba(255,77,109,0.08);
+  border: 1px solid rgba(255,77,109,0.3);
+  border-radius: 10px;
+  padding: 14px 16px;
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.range-warning strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
 .stations-list {
   display: flex;
   flex-direction: column;

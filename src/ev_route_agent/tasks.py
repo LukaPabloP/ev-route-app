@@ -63,21 +63,30 @@ def create_charging_station_task(agent: Agent, context_tasks: list, route_input:
         description=(
             f"You MUST call tools before giving a Final Answer. "
             f"Do NOT give a Final Answer until you have tool results.\n\n"
-            f"Read the STOP coordinates from the previous task context.\n\n"
+            f"Read the STOP coordinates AND the DESTINATION coordinates from the previous task context.\n\n"
             f"For EACH stop coordinate, call find_charging_stations with:\n"
             f"  - latitude: the stop's latitude\n"
             f"  - longitude: the stop's longitude\n"
             f"  - radius_km: 50\n\n"
+            f"ADDITIONALLY, call find_charging_stations for the DESTINATION coordinates too.\n"
+            f"This is the charging station near the destination so the user can charge on arrival.\n"
+            f"Use radius_km: 20 for the destination search (closer is better).\n\n"
             f"The tool automatically filters by the correct providers.\n\n"
             f"Then pick the best station per stop and output:\n"
             f"  STATION 1: [name]\n"
+            f"  PROVIDER: [name]\n"
+            f"  COORDS: [lat],[lng]\n"
+            f"  POWER: [X] kW\n"
+            f"  ...\n"
+            f"  DESTINATION STATION: [name]\n"
             f"  PROVIDER: [name]\n"
             f"  COORDS: [lat],[lng]\n"
             f"  POWER: [X] kW"
         ),
         expected_output=(
             "List of charging stations with name, provider, "
-            "GPS coordinates (lat,lng), and power in kW per stop."
+            "GPS coordinates (lat,lng), and power in kW per stop, "
+            "PLUS one station near the destination marked as DESTINATION STATION."
         ),
         agent=agent,
         context=context_tasks,
@@ -116,8 +125,15 @@ def create_provider_qa_task(agent: Agent, context_tasks: list, route_input: dict
             f"The tool automatically filters by the correct providers.\n"
             f"  Then pick a matching station from the results.\n\n"
             f"- If no matching station is found, note it as 'NO MATCHING STATION' for that stop.\n\n"
+            f"IMPORTANT: Also validate the DESTINATION STATION (charging near destination) the same way.\n"
+            f"If it does not match, search for a replacement near the destination coordinates.\n\n"
             f"Output the final validated list in the same format:\n"
             f"  STATION [N]: [name]\n"
+            f"  PROVIDER: [name]\n"
+            f"  COORDS: [lat],[lng]\n"
+            f"  POWER: [X] kW\n"
+            f"  ...\n"
+            f"  DESTINATION STATION: [name]\n"
             f"  PROVIDER: [name]\n"
             f"  COORDS: [lat],[lng]\n"
             f"  POWER: [X] kW"
@@ -150,17 +166,24 @@ def create_route_building_task(agent: Agent, context_tasks: list, route_input: d
         description=(
             f"You MUST call tools before giving a Final Answer. "
             f"Do NOT give a Final Answer until you have tool results.\n\n"
-            f"Read the COORDS of each charging station from the previous task context.\n\n"
+            f"Read the COORDS of each charging station from the previous task context.\n"
+            f"Also read the DESTINATION STATION coordinates - this is the charging station "
+            f"near the destination where the user can charge on arrival.\n\n"
             f"{waypoint_instruction}"
             f"Call build_google_maps_link with:\n"
             f"  - origin: \"{route_input['origin']}\"\n"
             f"  - destination: \"{route_input['destination']}\"\n"
-            f"  - waypoints: all waypoints (user stops + charging stations) joined with | "
-            f"(e.g. \"48.1,11.5|49.2,12.3\")\n\n"
+            f"  - waypoints: all waypoints joined with | in this order:\n"
+            f"    1. Route charging stops (STATION 1, 2, etc.)\n"
+            f"    2. User waypoints (if any)\n"
+            f"    3. DESTINATION STATION as the LAST waypoint (charging near destination)\n"
+            f"    Example: \"48.1,11.5|49.2,12.3|50.1,13.4\"\n\n"
+            f"The DESTINATION STATION must be the LAST waypoint before the actual destination.\n\n"
             f"Then output the Google Maps link from the tool result."
         ),
         expected_output=(
-            "A Google Maps link with all user stops and charging stops as waypoints."
+            "A Google Maps link with all charging stops, user stops, "
+            "and the destination charging station as waypoints."
         ),
         agent=agent,
         context=context_tasks,

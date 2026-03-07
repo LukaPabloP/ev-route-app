@@ -128,8 +128,14 @@ async function startPlanning() {
   const origin = document.getElementById('origin').value.trim();
   const destination = document.getElementById('destination').value.trim();
 
+  const originEl = document.getElementById('origin');
+  const destEl = document.getElementById('destination');
+  originEl.classList.remove('input-error');
+  destEl.classList.remove('input-error');
+
   if (!origin || !destination) {
-    alert('Bitte Start und Ziel eingeben.');
+    if (!origin) originEl.classList.add('input-error');
+    if (!destination) destEl.classList.add('input-error');
     return;
   }
 
@@ -362,6 +368,41 @@ function renderResult(evt) {
     stationsEl.innerHTML = '';
   }
 
+  // Range warning
+  const rangeWarning = document.getElementById('range-warning');
+  const rangeKm = parseFloat(document.getElementById('range_km').value);
+  const effectiveRange = rangeKm * 0.85; // 15% safety buffer
+  let warningMsg = '';
+
+  // Check if "NO MATCHING STATION" appears in the log
+  const noMatchFound = /NO MATCHING STATION/i.test(searchText);
+  if (noMatchFound) {
+    warningMsg = '<strong>Kein passender Anbieter gefunden</strong>' +
+      'Fuer mindestens einen Ladestopp wurde keine Station des gewaehlten Anbieters gefunden. ' +
+      'Der Google Maps Link wurde trotzdem erstellt.';
+  }
+
+  // Check if distance between stops exceeds range
+  if (totalDist) {
+    const dist = parseFloat(totalDist.replace(',', ''));
+    const segments = stations.length + 1;
+    const avgSegment = dist / segments;
+    if (avgSegment > effectiveRange) {
+      warningMsg = '<strong>Reichweite moeglicherweise nicht ausreichend</strong>' +
+        `Die Strecke betraegt ${totalDist} km mit ${stations.length} Ladestopp(s). ` +
+        `Bei ${rangeKm} km Reichweite (effektiv ~${Math.round(effectiveRange)} km) ` +
+        'koennten einzelne Abschnitte zu lang sein. ' +
+        'Der Google Maps Link wurde trotzdem erstellt &ndash; bitte Reichweite pruefen.';
+    }
+  }
+
+  if (warningMsg) {
+    rangeWarning.innerHTML = warningMsg;
+    rangeWarning.style.display = 'block';
+  } else {
+    rangeWarning.style.display = 'none';
+  }
+
   // Maps link
   let url = evt.maps_url || null;
   if (!url) {
@@ -488,6 +529,8 @@ function escHtml(str) {
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
+document.getElementById('origin').addEventListener('input', function() { this.classList.remove('input-error'); });
+document.getElementById('destination').addEventListener('input', function() { this.classList.remove('input-error'); });
 loadProviders();
 
 fetch('/health').then(r => r.json()).then(data => {
