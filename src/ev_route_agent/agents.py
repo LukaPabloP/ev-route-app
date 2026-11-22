@@ -14,7 +14,7 @@ def get_claude_llm() -> LLM:
     return LLM(
         model="anthropic/claude-sonnet-4-6",
         api_key=os.environ["ANTHROPIC_API_KEY"],
-        temperature=0.2,
+        # kein temperature: seit API-Version 2026-10-21 lehnt das Anthropic-SDK es ab
     )
 
 

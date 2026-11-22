@@ -71,34 +71,23 @@ class RouteAnalysisTool(BaseTool):
         total_duration_s = sum(leg["duration"]["value"] for leg in legs)
         total_km = total_distance_m / 1000
 
-        # Flatten all steps across all legs
-        steps = []
-        cum_dist = 0.0
+        # Walk the detailed polyline, not the steps: a single motorway step can be >100 km long
+        points = []
         for leg in legs:
             for step in leg["steps"]:
-                cum_dist += step["distance"]["value"] / 1000
-                steps.append({
-                    "cum_km": cum_dist,
-                    "end_lat": step["end_location"]["lat"],
-                    "end_lng": step["end_location"]["lng"],
-                })
+                points += polyline_lib.decode(step["polyline"]["points"])
 
         # ── 3. Calculate charging stop positions ──────────────────────────
         effective_range = range_km * (1.0 - safety_buffer_pct)
         charging_stops = []
-        current_charge_km = 0.0  # km since last charge / start
+        cum_km = 0.0
+        last_stop_km = 0.0
 
-        for step in steps:
-            driven_since_last = step["cum_km"] - (
-                charging_stops[-1]["cum_km"] if charging_stops else 0.0
-            )
-            if driven_since_last >= effective_range:
-                # Find the step just before we run out
-                charging_stops.append({
-                    "cum_km": step["cum_km"],
-                    "lat": step["end_lat"],
-                    "lng": step["end_lng"],
-                })
+        for (lat1, lng1), (lat2, lng2) in zip(points, points[1:]):
+            cum_km += haversine_km(lat1, lng1, lat2, lng2)
+            if cum_km - last_stop_km >= effective_range:
+                charging_stops.append({"cum_km": cum_km, "lat": lat2, "lng": lng2})
+                last_stop_km = cum_km
 
         # ── 4. Build result ────────────────────────────────────────────────
         duration_h = total_duration_s // 3600
@@ -127,7 +116,7 @@ class RouteAnalysisTool(BaseTool):
         return "\n".join(lines)
 
 
-# ── Haversine helper (not used above but useful for agents) ───────────────────
+# ── Haversine helper ──────────────────────────────────────────────────────────
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     R = 6371.0
     phi1, phi2 = math.radians(lat1), math.radians(lat2)

@@ -260,7 +260,6 @@ async def root():
 @app.get("/health")
 async def health():
     keys = {
-        "deepseek": bool(os.getenv("DEEPSEEK_API_KEY")),
         "anthropic": bool(os.getenv("ANTHROPIC_API_KEY")),
         "google_maps": bool(os.getenv("GOOGLE_MAPS_API_KEY")),
         "openchargermap": bool(os.getenv("OPENCHARGERMAP_API_KEY")),
