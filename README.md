@@ -1,96 +1,108 @@
 # EV Route Agent
 
-Multi-Agent Web App zur Planung von Elektrofahrzeug-Routen mit optimalen Ladestopps.
-Nutzt **CrewAI** mit 4 spezialisierten Agenten, die live ihren Fortschritt via **Server-Sent Events** ans Frontend streamen.
+Plan a long trip in an electric car and get the charging stops picked for you.
+Four AI agents work through the route one after another and stream their progress live to the browser.
 
-## Architektur
+**Live demo:** https://ev-route-app-911796949663.europe-west1.run.app/
+
+## Why I built this
+
+My family bought an electric car, and my dad said he wished there was an app that plans a trip and chooses the charging stops for him, filtered by the charging providers he actually uses. I built it for fun, and it turned into my first multi-agent project.
+
+## How it works
 
 ```
 Browser (HTML/CSS/JS)
-  │  SSE Stream (live Agent-Logs)
+  │  Server-Sent Events (live agent log)
   ▼
-FastAPI Server (server.py)
+FastAPI server (server.py)
   │
-  ├── Agent 1: Route Planner         [Claude]  → Geocodierung + Ladestopp-Berechnung
-  ├── Agent 2: Charging Specialist    [Claude]  → IONITY/Tesla/BNA direkt + GE/OCM Fallback
-  ├── Agent 3: Provider QA            [Claude]  → Validiert Anbieter-Filter
-  └── Agent 4: Route Builder          [Claude]  → Google Maps Link mit allen Waypoints
+  ├── Agent 1: Route Planner        → geocoding and charging stop calculation
+  ├── Agent 2: Charging Specialist  → finds stations near each stop
+  ├── Agent 3: Provider QA          → checks the stations against the selected providers
+  └── Agent 4: Route Builder        → builds a Google Maps link with all waypoints
 ```
 
-### Datenquellen
+The agents are built with [CrewAI](https://www.crewai.com/) and run on Claude through the Anthropic API. They run sequentially, and each one has its own tools.
 
-- **IONITY** – Offizielle Stationsdaten via wf-assets.com (kein API Key)
-- **Tesla Supercharger** – Via supercharge.info (kein API Key)
-- **Bundesnetzagentur** – Alle ~195.000 Ladepunkte in DE via Open Data ArcGIS (kein API Key)
-- **GoingElectric** – Europaweite Stationsdaten (optionaler API Key, sonst OpenChargeMap)
-- **OpenChargeMap** – Globaler Fallback (API Key)
+### Data sources
 
-## Setup
-
-### 1. Abhaengigkeiten
-
-```bash
-cd ev_route_webapp
-pip install -e .
-```
-
-### 2. API Keys
-
-Erstelle eine `.env` Datei im Projektroot:
-
-```
-ANTHROPIC_API_KEY=sk-...
-GOOGLE_MAPS_API_KEY=...
-OPENCHARGERMAP_API_KEY=...
-GOINGELECTRIC_API_KEY=...
-```
-
-### 3. Server starten
-
-```bash
-python -m ev_route_agent.server
-# → http://localhost:8000
-```
-
-## Projektstruktur
-
-```
-ev_route_webapp/
-├── pyproject.toml
-├── static/
-│   ├── index.html          ← Frontend HTML
-│   ├── style.css           ← Dark Electric UI
-│   └── app.js              ← Client-Logik + SSE Handling
-└── src/ev_route_agent/
-    ├── server.py            ← FastAPI + SSE Streaming
-    ├── crew.py              ← CrewAI Crew (4 Agents, sequential)
-    ├── agents.py            ← Agent-Definitionen
-    ├── tasks.py             ← Task-Definitionen mit Waypoint-Support
-    ├── config/providers.py  ← Ladeanbieter + OCM/GE/BNA Mappings
-    └── tools/
-        ├── geocode_tool.py           ← Google Maps Geocoding
-        ├── route_analysis_tool.py    ← Routenberechnung + Ladestopp-Positionen
-        ├── charging_station_tool.py  ← IONITY/Tesla/BNA direkt + API-Fallback
-        └── maps_link_builder.py      ← Google Maps URL Builder
-```
-
-## API Endpoints
-
-| Endpoint | Methode | Beschreibung |
+| Source | Coverage | API key |
 |---|---|---|
-| `/` | GET | Frontend |
-| `/health` | GET | API Key Status |
-| `/providers` | GET | Alle Ladeanbieter |
-| `/plan-route` | POST | Route planen (startet Job) |
-| `/stream/{job_id}` | GET | SSE Stream fuer Job |
+| IONITY | Official station data | not needed |
+| Tesla Supercharger | via supercharge.info | not needed |
+| Bundesnetzagentur | about 195,000 charging points in Germany (open data) | not needed |
+| GoingElectric | Europe | optional |
+| OpenChargeMap | Worldwide fallback | needed |
 
 ## Features
 
-- Anbieter-Filter (IONITY, Tesla, EnBW, Allego, etc.)
-- Suchfunktion fuer Ladeanbieter
-- Zwischenstopps (werden geocodiert und in Google Maps Link eingebaut)
-- Einstellbare EV-Reichweite und Mindest-Ladeleistung
-- Live Agent-Pipeline mit Fortschrittsanzeige
-- Ergebnis mit Stationskarten, Anbieter, Leistung
-- Google Maps Link mit allen Ladestopps als Waypoints
-- Mobile Responsive
+- Filter by charging provider (IONITY, Tesla, EnBW, Allego and more), with search
+- Optional intermediate stops, geocoded and added to the final route
+- Adjustable vehicle range and minimum charging power
+- Live view of the agent pipeline while it works
+- Result with station cards showing provider and power
+- Google Maps link with every charging stop as a waypoint
+- Works on mobile
+
+## Tech stack
+
+Python, FastAPI, CrewAI, Anthropic API, Google Maps Directions and Geocoding API, Server-Sent Events, plain HTML/CSS/JavaScript, Docker, Google Cloud Run.
+
+## Run it locally
+
+```bash
+pip install -e .
+```
+
+Create a `.env` file in the project root:
+
+```
+ANTHROPIC_API_KEY=...
+GOOGLE_MAPS_API_KEY=...
+OPENCHARGERMAP_API_KEY=...
+GOINGELECTRIC_API_KEY=...   # optional, OpenChargeMap is used without it
+```
+
+Start the server:
+
+```bash
+python -m ev_route_agent.server
+# http://localhost:8000
+```
+
+Or with Docker:
+
+```bash
+docker build -t ev-route-app .
+docker run -p 8080:8080 --env-file .env ev-route-app
+```
+
+## Project structure
+
+```
+├── Dockerfile
+├── pyproject.toml
+├── static/                     frontend (HTML, CSS, JS with SSE handling)
+└── src/ev_route_agent/
+    ├── server.py               FastAPI app and SSE streaming
+    ├── crew.py                 CrewAI crew (4 agents, sequential)
+    ├── agents.py               agent definitions
+    ├── tasks.py                task definitions
+    ├── config/providers.py     charging providers and data source mappings
+    └── tools/                  geocoding, route analysis, station search, Maps link builder
+```
+
+## API
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | GET | Frontend |
+| `/health` | GET | Shows which API keys are configured |
+| `/providers` | GET | All charging providers |
+| `/plan-route` | POST | Starts a route planning job |
+| `/stream/{job_id}` | GET | Live event stream for a job |
+
+## License
+
+MIT
