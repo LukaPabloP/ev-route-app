@@ -22,7 +22,7 @@ FastAPI Server (server.py)
 - **IONITY** – Offizielle Stationsdaten via wf-assets.com (kein API Key)
 - **Tesla Supercharger** – Via supercharge.info (kein API Key)
 - **Bundesnetzagentur** – Alle ~195.000 Ladepunkte in DE via Open Data ArcGIS (kein API Key)
-- **GoingElectric** – Europaweite Stationsdaten (API Key)
+- **GoingElectric** – Europaweite Stationsdaten (optionaler API Key, sonst OpenChargeMap)
 - **OpenChargeMap** – Globaler Fallback (API Key)
 
 ## Setup

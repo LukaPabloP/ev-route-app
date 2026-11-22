@@ -535,7 +535,7 @@ loadProviders();
 
 fetch('/health').then(r => r.json()).then(data => {
   const missing = Object.entries(data.api_keys)
-    .filter(([k,v]) => !v).map(([k]) => k);
+    .filter(([k,v]) => !v && k !== 'goingelectric').map(([k]) => k);  // GoingElectric optional: Fallback ist OpenChargeMap
   if (missing.length) {
     log(`API Keys fehlen: ${missing.join(', ')}`, 'error');
   } else {
